@@ -1,6 +1,7 @@
 import struct
 import numpy as np
 import gzip
+import random
 try:
     from simple_ml_ext import *
 except:
@@ -20,7 +21,7 @@ def add(x, y):
         Sum of x + y
     """
     ### BEGIN YOUR CODE
-    pass
+    return x + y
     ### END YOUR CODE
 
 
@@ -47,10 +48,36 @@ def parse_mnist(image_filename, label_filename):
                 labels of the examples.  Values should be of type np.uint8 and
                 for MNIST will contain the values 0-9.
     """
-    ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    
+    with gzip.open(image_filename, 'rb') as f_image:
+        data_image = f_image.read()
+        fmt_header = '>iiii'
+        offset = 0
+        _, num_images, rows, columns = struct.unpack_from(fmt_header, data_image, offset)
+        image_size = rows * columns
+        fmt_image = '>' + str(image_size) + 'B'
+        offset += struct.calcsize(fmt_header)
+        X = np.empty([num_images, image_size])
+        for i in range(num_images):
+            X[i] = struct.unpack_from(fmt_image, data_image, offset)
+            offset += struct.calcsize(fmt_image)
+        X = X.reshape(num_images, image_size).astype(np.float32)
+        X = X / (np.max(X) - np.min(X))
 
+    with gzip.open(label_filename, 'rb') as f_image:
+        data_label = f_image.read()
+        fmt_header = '>ii'
+        offset = 0
+        _, num_labels = struct.unpack_from(fmt_header, data_label, offset)
+        fmt_label = 'B'
+        offset += struct.calcsize(fmt_header)
+        y = np.empty([num_labels, 1])
+        for i in range(num_labels):
+            y[i] = struct.unpack_from(fmt_label, data_label, offset)
+            offset += struct.calcsize(fmt_label)
+        y = y.reshape(num_labels).astype(np.uint8)
+    return (X, y)
+    
 
 def softmax_loss(Z, y):
     """ Return softmax loss.  Note that for the purposes of this assignment,
@@ -68,7 +95,8 @@ def softmax_loss(Z, y):
         Average softmax loss over the sample.
     """
     ### BEGIN YOUR CODE
-    pass
+    softmax_Z = np.exp(Z)/np.sum(np.exp(Z), 1, keepdims=True)
+    return np.mean(-np.log(softmax_Z[range(Z.shape[0]), y]))
     ### END YOUR CODE
 
 
@@ -91,8 +119,25 @@ def softmax_regression_epoch(X, y, theta, lr = 0.1, batch=100):
         None
     """
     ### BEGIN YOUR CODE
-    pass
+    def data_iter(batch_size, features, labels):
+        num_examples = len(features)
+        indices = list(range(num_examples))
+        #random.shuffle(indices)
+        for i in range(0, num_examples, batch_size):
+            batch_indices = indices[i: min(i + batch_size, num_examples)]
+            yield features[batch_indices], labels[batch_indices]
+
+    for X_batch, y_batch in data_iter(batch, X, y):
+        h = X_batch@theta
+        Z = np.exp(h)/np.sum(np.exp(h), 1, keepdims=True)
+        #Z[range(Z.shape[0]), y_batch] -= 1
+        #grad = X_batch.T@Z / batch
+        I_y = np.zeros(Z.shape)
+        I_y[range(Z.shape[0]), y_batch] = 1
+        grad = X_batch.T@(Z - I_y) / batch
+        theta -= lr * grad;
     ### END YOUR CODE
+
 
 
 def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
@@ -118,7 +163,23 @@ def nn_epoch(X, y, W1, W2, lr = 0.1, batch=100):
         None
     """
     ### BEGIN YOUR CODE
-    pass
+    def data_iter(batch_size, features, labels):
+        num_examples = len(features)
+        indices = list(range(num_examples))
+        #random.shuffle(indices)
+        for i in range(0, num_examples, batch_size):
+            batch_indices = indices[i: min(i + batch_size, num_examples)]
+            yield features[batch_indices], labels[batch_indices]
+            
+    for X_batch, y_batch in data_iter(batch, X, y):
+        Z1 = np.maximum(X_batch@W1, np.zeros((X_batch@W1).shape))
+        Z = np.exp(Z1@W2)/np.sum(np.exp(Z1@W2), 1, keepdims=True)
+        I_y = np.zeros(Z.shape)
+        I_y[range(Z.shape[0]), y_batch] = 1
+        G2 = Z - I_y
+        G1 = np.ones(Z1.shape) * (Z1 > 0) * (G2@W2.T)
+        W1 -= lr * X_batch.T@G1 / batch
+        W2 -= lr * Z1.T@G2 / batch
     ### END YOUR CODE
 
 
